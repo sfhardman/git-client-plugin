@@ -780,11 +780,13 @@ public class CliGitAPIImpl extends LegacyCompatibleGitAPIImpl {
         return new ChangelogCommand() {
 
             /** Equivalent to the git-log raw format but using ISO 8601 date format - also prevent to depend on git CLI future changes */
-            public static final String RAW = "commit %H%ntree %T%nparent %P%nauthor %aN <%aE> %ai%ncommitter %cN <%cE> %ci%n%n%w(76,4,4)%s%n%n%b";
+            public static final String RAW = "commit %H%ntree %T%nparent %P%nauthor %aN <%aE> %ai%ncommitter %cN <%cE> %ci%n%n%w(<<messageLineWrappingWidth>>,4,4)%s%n%n%b";
             final List<String> revs = new ArrayList<String>();
 
             Integer n = null;
             Writer out = null;
+            boolean includeMergeCommits = false;
+            Integer messageLineWrappingWidth = 76;
 
             public ChangelogCommand excludes(String rev) {
                 revs.add(sanitize('^'+rev));
@@ -813,6 +815,16 @@ public class CliGitAPIImpl extends LegacyCompatibleGitAPIImpl {
                 this.n = n;
                 return this;
             }
+            
+            public ChangelogCommand includeMergeCommits() {
+                this.includeMergeCommits = true;
+                return this;
+            }
+            
+            public ChangelogCommand messageLineWrappingWidth(int n) {
+                this.messageLineWrappingWidth = n;
+                return this;
+            }
 
             public void abort() {
                 /* No cleanup needed to abort the CliGitAPIImpl ChangelogCommand */
@@ -820,7 +832,11 @@ public class CliGitAPIImpl extends LegacyCompatibleGitAPIImpl {
 
             public void execute() throws GitException, InterruptedException {
                 ArgumentListBuilder args = new ArgumentListBuilder(gitExe, "whatchanged", "--no-abbrev", "-M");
-                args.add("--format="+RAW);
+                // not using printf as RAW is full of placeholders that would have to be escaped
+                String rawFormat = RAW.replace("<<messageLineWrappingWidth>>", messageLineWrappingWidth.toString());
+                args.add("--format="+rawFormat);
+                if (includeMergeCommits)
+                    args.add("-m");
                 if (n!=null)
                     args.add("-n").add(n);
                 for (String rev : this.revs)
